@@ -209,6 +209,9 @@
               <n-text class="slider-num" depth="3">{{ (playVolume * 100).toFixed(0) }}%</n-text>
             </div>
           </n-popover>
+          <!-- 桌面歌词按钮（仅在Electron环境显示） -->
+          <DesktopLyricsToggle v-if="isElectron" class="hidden desktop-lyrics-btn" />
+          
           <!-- 播放列表 -->
           <n-badge v-if="playMode !== 'fm'" :value="playList?.length ?? 0" :show="showPlaylistCount" :max="999" :style="{
             marginRight: showPlaylistCount ? '12px' : null,
@@ -247,6 +250,8 @@ import debounce from "@/utils/debounce";
 import SvgIcon from "@/components/Global/SvgIcon";
 import VueSlider from "vue-slider-component";
 import "vue-slider-component/theme/default.css";
+import DesktopLyricsToggle from "./DesktopLyricsToggle.vue";
+import { checkPlatform } from "@/utils/helper";
 
 const router = useRouter();
 const data = siteData();
@@ -275,6 +280,9 @@ const { showYrc, bottomLyricShow, showSider, showPlaylistCount, showSpectrums, p
 // 子组件
 const addPlaylistRef = ref(null);
 const downloadSongRef = ref(null);
+
+// 检查是否为Electron环境
+const isElectron = computed(() => checkPlatform.electron());
 
 // 图标渲染
 const renderIcon = (icon, isSpecial = false) => {
@@ -840,7 +848,8 @@ watch(
         }
       }
 
-      .playlist {
+      .playlist,
+      .desktop-lyrics-btn {
         transition: margin 0.3s;
 
         &.count {

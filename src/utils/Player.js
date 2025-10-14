@@ -2,6 +2,7 @@ import { Howl, Howler } from "howler";
 import { musicData, siteStatus, siteSettings } from "@/stores";
 import { getSongUrl, getSongLyric, songScrobble, getMusicNumUrlNew, getSongLyricLegacy, getSongTTML } from "@/api/song";
 import { checkPlatform, getLocalCoverData, getBlobUrlFromUrl } from "@/utils/helper";
+import { syncPlayStateToDesktopLyrics, syncLyricDataToDesktopLyrics, syncSongInfoToDesktopLyrics } from "@/utils/desktopLyricsSync";
 import { decode as base642Buffer } from "@/utils/base64";
 import { getSongPlayTime } from "@/utils/time.ts";
 import { getCoverGradient } from "@/utils/cover-color";
@@ -367,10 +368,16 @@ export const createPlayer = async (src, autoPlay = true) => {
       setAllInterval();
       // 更改状态
       status.playState = true;
-      // 发送状态
-      if (checkPlatform.electron()) {
-        window.electron?.ipcRenderer?.send("songStateChange", true);
+    // 发送状态
+    if (checkPlatform.electron()) {
+      window.electron?.ipcRenderer?.send("songStateChange", true);
+      
+      // 同步播放状态到桌面歌词
+      const settings = siteSettings();
+      if (settings.desktopLyricsEnabled) {
+        syncPlayStateToDesktopLyrics();
       }
+    }
       // 更改页面标题
       if (!checkPlatform.electron()) document.title = getPlaySongName();
     });
@@ -383,6 +390,12 @@ export const createPlayer = async (src, autoPlay = true) => {
       // 发送状态
       if (checkPlatform.electron()) {
         window.electron?.ipcRenderer?.send("songStateChange", false);
+        
+        // 同步播放状态到桌面歌词
+        const settings = siteSettings();
+        if (settings.desktopLyricsEnabled) {
+          syncPlayStateToDesktopLyrics();
+        }
       }
       // 更改页面标题
       if (!checkPlatform.electron()) document.title = defaultTitle || "SPlayer";
@@ -493,6 +506,15 @@ export const changePlayIndex = async (type = "next", play = false) => {
     const songData = playList?.[status.playIndex];
     if (songData) {
       music.playSongData = songData;
+      
+      // 同步歌曲信息到桌面歌词窗口
+      const settings = siteSettings();
+      if (checkPlatform.electron() && settings.desktopLyricsEnabled) {
+        syncSongInfoToDesktopLyrics();
+        // 同步歌词数据到桌面歌词窗口
+        syncLyricDataToDesktopLyrics();
+      }
+      
       // 渐出音乐
       if (!isPlayEnd) fadePlayOrPause("pause");
       // 初始化播放器
@@ -577,6 +599,15 @@ export const fadePlayOrPause = (type = "play") => {
 export const playOrPause = async () => {
   const status = player?.playing();
   fadePlayOrPause(status ? "pause" : "play");
+  // 立即同步一次播放状态到桌面歌词，避免图标回弹
+  try {
+    const settings = siteSettings();
+    if (checkPlatform.electron() && settings.desktopLyricsEnabled) {
+      setTimeout(() => {
+        try { syncPlayStateToDesktopLyrics(); } catch (_) {}
+      }, 60);
+    }
+  } catch (_) {}
 };
 
 /**
@@ -657,10 +688,24 @@ const setAudioTime = () => {
     const lyricsIndex = lyrics?.findIndex((v) => v?.time >= currentTime);
     // 赋值数据
     status.playTimeData = { currentTime, duration, bar, played, durationTime };
-    status.playSongLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+    
+    // 更新歌词索引
+    const newLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
+    const lyricIndexChanged = status.playSongLyricIndex !== newLyricIndex;
+    status.playSongLyricIndex = newLyricIndex;
+    
     // 显示进度条
-    if (checkPlatform.electron() && settings.showTaskbarProgress) {
-      electron.ipcRenderer.send("setProgressBar", bar);
+    if (checkPlatform.electron()) {
+      // 更新任务栏进度
+      if (settings.showTaskbarProgress) {
+        window.electron.ipcRenderer.send("setProgressBar", bar);
+      }
+      
+      // 同步桌面歌词播放状态（包含当前歌词索引）
+      // 为减少IPC通信频率，只在歌词索引变化时发送
+      if (lyricIndexChanged && settings.desktopLyricsEnabled) {
+        syncPlayStateToDesktopLyrics();
+      }
     }
   }
 };
@@ -755,6 +800,12 @@ const getSongLyricData = async (islocal, data) => {
   } catch (err) {
     $message.error("歌词处理出错");
     console.error("歌词处理出错：", err);
+  }
+  
+  // 同步歌词数据到桌面歌词窗口
+  const settings = siteSettings();
+  if (checkPlatform.electron() && settings.desktopLyricsEnabled) {
+    syncLyricDataToDesktopLyrics();
   }
 };
 

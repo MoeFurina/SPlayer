@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPlayer - 桌面歌词</title>
+  <style>
+    /* 锁定需要完全透明，基础默认透明 */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent; /* 完全透明，由应用层控制 */
+      overflow: hidden;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      color: white; /* 确保文本可见 */
+    }
+    
+    #app {
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* 定义全局变量 */
+    :root {
+      --primary-color: #18a058;
+      --primary-color-hover: #36ad6a;
+      --primary-color-pressed: #0c7a43;
+    }
+  </style>
+  <!-- 预加载字体 -->
+  <link rel="stylesheet" href="./font/font.css">
+</head>
+<body>
+  <div id="app"></div>
+  <!-- 加载独立的JS入口 -->
+  <script type="module" src="./src/desktop-lyrics.js"></script>
+  
+  <!-- 精简调试脚本（仅日志，不插入覆盖层） -->
+  <script>
+    console.log('桌面歌词HTML已加载');
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('桌面歌词DOM已加载');
+    });
+    window.addEventListener('error', function(e) {
+      console.error('桌面歌词窗口JavaScript错误:', e.message);
+    });
+  </script>
+</body>
+</html>
+
+
+
+

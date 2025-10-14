@@ -149,7 +149,10 @@ export default defineConfig(async ({ mode }) => {
         publicDir: resolve(__dirname, "public"),
         rollupOptions: {
           input: {
+            // 主窗口入口
             index: resolve(__dirname, "index.html"),
+            // 桌面歌词窗口入口
+            "desktop-lyrics": resolve(__dirname, "desktop-lyrics.html"),
           },
         },
         terserOptions: {

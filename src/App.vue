@@ -90,6 +90,7 @@ import userAgreement from "@/components/Modal/UserAgreement.vue";
 import userSignIn from "@/utils/userSignIn";
 import globalShortcut from "@/utils/globalShortcut";
 import globalEvents from "@/utils/globalEvents";
+import { initDesktopLyricsControls } from "@/utils/desktopLyricsSync";
 import packageJson from "@/../package.json";
 
 
@@ -327,10 +328,22 @@ onMounted(async () => {
   showAnnouncements();
   // 检查PWA更新
   checkUpdatesWeb();
+  
+  // 初始化桌面歌词控制（仅在Electron环境）
+  if (checkPlatform.electron() && typeof initDesktopLyricsControls === 'function') {
+    try {
+      initDesktopLyricsControls();
+      console.log("桌面歌词控制初始化成功");
+    } catch (error) {
+      console.warn("桌面歌词控制初始化失败:", error);
+    }
+  }
 });
 
 onUnmounted(() => {
-  if (!checkPlatform.electron()) window.removeEventListener("keyup", handleKeyUp);
+  if (!checkPlatform.electron()) {
+    window.removeEventListener("keyup", handleKeyUp);
+  }
 });
 </script>
 
