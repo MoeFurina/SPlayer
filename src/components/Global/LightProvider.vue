@@ -32,9 +32,6 @@ const NaiveProviderContent = {
   },
 };
 
-onMounted(() => {
-  console.log("LightProvider组件已挂载");
-});
 </script>
 
 <style lang="scss" scoped>

@@ -148,6 +148,8 @@
             <n-text class="played" depth="3">{{ playTimeData.played }}</n-text>
             <n-text depth="3">{{ playTimeData.durationTime }}</n-text>
           </div>
+          <!-- 桌面歌词按钮（仅在Electron环境显示） -->
+          <DesktopLyricsToggle v-if="isElectron" class="hidden desktop-lyrics-btn" />
           <!-- 播放模式 -->
           <n-dropdown v-if="playMode !== 'fm'" :options="playModeOptions" :show-arrow="true" trigger="hover"
             @select="playModeChange">
@@ -209,8 +211,6 @@
               <n-text class="slider-num" depth="3">{{ (playVolume * 100).toFixed(0) }}%</n-text>
             </div>
           </n-popover>
-          <!-- 桌面歌词按钮（仅在Electron环境显示） -->
-          <DesktopLyricsToggle v-if="isElectron" class="hidden desktop-lyrics-btn" />
           
           <!-- 播放列表 -->
           <n-badge v-if="playMode !== 'fm'" :value="playList?.length ?? 0" :show="showPlaylistCount" :max="999" :style="{

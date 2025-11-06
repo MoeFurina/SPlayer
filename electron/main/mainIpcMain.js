@@ -9,6 +9,7 @@ import { download } from "electron-dl";
 import { getFonts } from "font-list";
 import openLoginWin from "./loginWin"
 import getNeteaseMusicUrl from "@main/utils/getNeteaseMusicUrl";
+import { registerDesktopLyricsIpc } from "@main/desktopLyrics/desktopLyricsIpc";
 import axios from "axios";
 import fs from "fs/promises";
 
@@ -19,19 +20,20 @@ import fs from "fs/promises";
  */
 
 const mainIpcMain = (win, store) => {
-  /**
-   * MainProcess实例引用
-   * 由于mainIpcMain在MainProcess外部调用，需要传递实例
-   */
+  // MainProcess实例引用
   let mainProcessInstance = null;
-  
-  /**
-   * 设置MainProcess实例
-   * 此方法将从MainProcess.mainAppEvents()中调用
-   */
+
+  // 设置MainProcess实例并注册桌面歌词IPC事件
   const setMainProcessInstance = (instance) => {
     mainProcessInstance = instance;
-    console.log("MainProcess实例已设置到mainIpcMain");
+    
+    // 统一注册桌面歌词IPC事件
+    registerDesktopLyricsIpc(
+      ipcMain,
+      instance.desktopLyricsManager,
+      instance.mainWindow,
+      instance.store
+    );
   };
   // 仅追踪“应用内注册”的用户快捷键，避免清空开发快捷键
   const userRegisteredShortcuts = new Set();
@@ -68,9 +70,7 @@ const mainIpcMain = (win, store) => {
     configureAutoUpdater();
   });
 
-  // =====================
-  // 全局快捷键管理（新增）
-  // =====================
+  // 全局快捷键管理
   /**
    * 渲染进程传递快捷键列表缓存
    */
@@ -158,8 +158,8 @@ const mainIpcMain = (win, store) => {
     if (failed?.length) {
       console.warn("部分快捷键注册失败(来自 set-shortcut-list):", failed);
     }
-    win.webContents.send("shortcutListChange", list); // 新增: 向渲染进程发送快捷键列表更新通知，确保渲染进程获取最新数据
-    updateTrayMenu(win, store, list); // 新增: 实时更新系统托盘菜单，以反映最新的快捷键配置
+    win.webContents.send("shortcutListChange", list);
+    updateTrayMenu(win, store, list);
   });
 
   /**
@@ -425,274 +425,8 @@ const mainIpcMain = (win, store) => {
     });
   });
 
-  // =====================
-  // 桌面歌词窗口管理
-  // =====================
-  
-  /**
-   * 显示桌面歌词窗口
-   */
-  ipcMain.on("desktop-lyrics-show", () => {
-    console.log("收到显示桌面歌词窗口请求");
-    if (mainProcessInstance) {
-      mainProcessInstance.showDesktopLyricsWindow();
-    }
-  });
-  
-  /**
-   * 隐藏桌面歌词窗口
-   */
-  ipcMain.on("desktop-lyrics-hide", () => {
-    console.log("收到隐藏桌面歌词窗口请求");
-    if (mainProcessInstance) {
-      mainProcessInstance.hideDesktopLyricsWindow();
-    }
-  });
-  
-  /**
-   * 切换桌面歌词窗口显示状态
-   * 注意：这个方法已弃用，改为使用明确的show/hide命令
-   */
-  ipcMain.on("desktop-lyrics-toggle", () => {
-    console.log("收到切换桌面歌词窗口请求(弃用)，这可能导致状态混乱");
-    if (mainProcessInstance) {
-      // 检查桌面歌词窗口当前状态，避免状态冲突
-      const isVisible = mainProcessInstance.isDesktopLyricsVisible();
-      console.log("当前桌面歌词窗口状态:", isVisible ? "显示中" : "已隐藏");
-      
-      if (isVisible) {
-        mainProcessInstance.hideDesktopLyricsWindow();
-      } else {
-        mainProcessInstance.showDesktopLyricsWindow();
-      }
-    }
-  });
-  
-  /**
-   * 设置总是置顶
-   */
-  ipcMain.on("desktop-lyrics-set-always-on-top", (_, flag) => {
-    console.log("设置桌面歌词总是置顶:", flag);
-    if (mainProcessInstance) {
-      mainProcessInstance.setDesktopLyricsAlwaysOnTop(flag);
-    }
-  });
-  
-  /**
-   * 从主窗口向桌面歌词窗口发送播放状态
-   */
-  ipcMain.on("desktop-lyrics-update-play-state", (_, data) => {
-    if (mainProcessInstance?.desktopLyricsWindow && 
-        !mainProcessInstance.desktopLyricsWindow.isDestroyed()) {
-      mainProcessInstance.desktopLyricsWindow.webContents.send(
-        "play-state-updated", 
-        data
-      );
-    }
-  });
-  
-  /**
-   * 从主窗口向桌面歌词窗口发送歌词数据
-   */
-  ipcMain.on("desktop-lyrics-update-lyric-data", (_, data) => {
-    if (mainProcessInstance?.desktopLyricsWindow && 
-        !mainProcessInstance.desktopLyricsWindow.isDestroyed()) {
-      mainProcessInstance.desktopLyricsWindow.webContents.send(
-        "lyric-data-updated", 
-        data
-      );
-    }
-  });
-  
-  /**
-   * 从主窗口向桌面歌词窗口发送歌曲信息
-   */
-  ipcMain.on("desktop-lyrics-update-song-info", (_, data) => {
-    if (mainProcessInstance?.desktopLyricsWindow && 
-        !mainProcessInstance.desktopLyricsWindow.isDestroyed()) {
-      mainProcessInstance.desktopLyricsWindow.webContents.send(
-        "song-info-updated", 
-        data
-      );
-    }
-  });
-  
-  /**
-   * 从主窗口向桌面歌词窗口发送设置更新
-   */
-  ipcMain.on("desktop-lyrics-update-settings", (_, settings) => {
-    if (mainProcessInstance?.desktopLyricsWindow && 
-        !mainProcessInstance.desktopLyricsWindow.isDestroyed()) {
-      mainProcessInstance.desktopLyricsWindow.webContents.send(
-        "settings-updated", 
-        settings
-      );
-    }
-  });
-
-  /**
-   * 桌面歌词窗口请求设置同步
-   */
-  ipcMain.on("desktop-lyrics-sync-settings", (event) => {
-    console.log("收到桌面歌词设置同步请求");
-    if (win && !win.isDestroyed()) {
-      // 请求主窗口同步设置到桌面歌词窗口
-      win.webContents.send("desktop-lyrics-sync-settings-request");
-    }
-  });
-  
-  /**
-   * 桌面歌词窗口请求歌曲信息同步
-   */
-  ipcMain.on("desktop-lyrics-sync-song-info", (event) => {
-    console.log("收到桌面歌词歌曲信息同步请求");
-    if (win && !win.isDestroyed()) {
-      // 请求主窗口同步歌曲信息到桌面歌词窗口
-      win.webContents.send("desktop-lyrics-sync-song-info-request");
-    }
-  });
-  
-  /**
-   * 从桌面歌词窗口向主窗口发送播放控制指令
-   */
-  ipcMain.on("desktop-lyrics-control", (_, action) => {
-    console.log("收到桌面歌词控制指令:", action);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("desktop-lyrics-control", action);
-    } else {
-      console.warn("主窗口不可用，无法转发桌面歌词控制指令");
-    }
-  });
-  
-  /**
-   * 桌面歌词窗口移动
-   */
-  ipcMain.on("desktop-lyrics-window-move", (_, { deltaX, deltaY }) => {
-    if (mainProcessInstance?.desktopLyricsWindow) {
-      const bounds = mainProcessInstance.desktopLyricsWindow.getBounds();
-      mainProcessInstance.desktopLyricsWindow.setBounds({
-        x: bounds.x + deltaX,
-        y: bounds.y + deltaY,
-        width: bounds.width,
-        height: bounds.height,
-      });
-    }
-  });
-
-  /**
-   * 桌面歌词窗口大小调整
-   */
-  ipcMain.on("desktop-lyrics-window-resize", (_, { height, direction }) => {
-    if (mainProcessInstance?.desktopLyricsWindow) {
-      const bounds = mainProcessInstance.desktopLyricsWindow.getBounds();
-      const newBounds = { ...bounds, height };
-      
-      // 如果是从顶部调整，需要同时调整Y坐标
-      if (direction === "top") {
-        newBounds.y = bounds.y + (bounds.height - height);
-      }
-      
-      mainProcessInstance.desktopLyricsWindow.setBounds(newBounds);
-    }
-  });
-
-  /**
-   * 设置桌面歌词窗口锁定状态
-   */
-  ipcMain.on("desktop-lyrics-set-locked", (_, isLocked) => {
-    if (mainProcessInstance) {
-      mainProcessInstance.store.set("desktopLyricsWindowConfig.isLocked", isLocked);
-      // 锁定时启用点击穿透，仅显示歌词；解锁后恢复
-      const winDL = mainProcessInstance.desktopLyricsWindow;
-      if (winDL && !winDL.isDestroyed()) {
-        try {
-          if (isLocked) {
-            winDL.setIgnoreMouseEvents(true, { forward: true });
-            winDL.setFocusable(false);
-            // 同步让窗口背景彻底透明
-            try { winDL.setOpacity(1.0); } catch(_) {}
-          } else {
-            winDL.setIgnoreMouseEvents(false);
-            winDL.setFocusable(true);
-            try { winDL.focus(); } catch(_) {}
-          }
-        } catch (e) {
-          console.warn("设置桌面歌词窗口穿透失败", e);
-        }
-      }
-    }
-  });
-
-  /**
-   * 切换桌面歌词锁定状态
-   */
-  ipcMain.on("desktop-lyrics-toggle-lock", () => {
-    console.log("收到切换桌面歌词锁定状态请求");
-    if (mainProcessInstance?.desktopLyricsWindow) {
-      // 获取当前锁定状态
-      const currentLocked = mainProcessInstance.store.get("desktopLyricsWindowConfig.isLocked", false);
-      const newLocked = !currentLocked;
-      
-      // 更新锁定状态
-      mainProcessInstance.store.set("desktopLyricsWindowConfig.isLocked", newLocked);
-      
-      // 通知桌面歌词窗口更新状态
-      mainProcessInstance.desktopLyricsWindow.webContents.send("desktop-lyrics-lock-changed", newLocked);
-      
-      // 锁定时启用点击穿透，仅显示歌词；解锁后恢复
-      const winDL = mainProcessInstance.desktopLyricsWindow;
-      if (winDL && !winDL.isDestroyed()) {
-        try {
-          if (newLocked) {
-            winDL.setIgnoreMouseEvents(true, { forward: true });
-            winDL.setFocusable(false);
-            // 同步让窗口背景彻底透明
-            try { winDL.setOpacity(1.0); } catch(_) {}
-          } else {
-            winDL.setIgnoreMouseEvents(false);
-            winDL.setFocusable(true);
-            try { winDL.focus(); } catch(_) {}
-          }
-        } catch (e) {
-          console.warn("设置桌面歌词窗口穿透失败", e);
-        }
-        console.log(`桌面歌词锁定状态已切换为: ${newLocked ? '锁定' : '解锁'}`);
-      }
-    }
-  });
-  
-  /**
-   * 处理桌面歌词同步播放状态请求
-   */
-  ipcMain.on("desktop-lyrics-sync-play-state", () => {
-    if (mainProcessInstance) {
-      // 从主窗口获取当前播放状态并发送到桌面歌词窗口
-      const winDL = mainProcessInstance.desktopLyricsWindow;
-      if (winDL && !winDL.isDestroyed()) {
-        // 请求主窗口发送当前播放状态
-        win.webContents.send("desktop-lyrics-request-play-state");
-      }
-    }
-  });
-  
-  /**
-   * 获取桌面歌词窗口状态
-   */
-  ipcMain.handle("desktop-lyrics-get-state", () => {
-    if (mainProcessInstance?.desktopLyricsWindow && 
-        !mainProcessInstance.desktopLyricsWindow.isDestroyed()) {
-      return {
-        isVisible: mainProcessInstance.desktopLyricsWindow.isVisible(),
-        bounds: mainProcessInstance.desktopLyricsWindow.getBounds(),
-        alwaysOnTop: mainProcessInstance.desktopLyricsWindow.isAlwaysOnTop(),
-      };
-    }
-    return null;
-  });
-  
-  // 返回setMainProcessInstance方法，供外部调用
   return { setMainProcessInstance };
-  };
+};
 
 /**
  * 从 Bilibili 视频中获取文件的 Base64 数据

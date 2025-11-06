@@ -48,30 +48,24 @@ export const useDesktopLyricsStore = defineStore("desktopLyrics", {
   actions: {
     // 更新歌词数据
     updateLyricData(data) {
-      this.lyricsData = data.lrc || [];
-      this.hasYrc = data.hasYrc || false;
-      this.hasLrcTran = data.hasLrcTran || false;
-      this.hasLrcRoma = data.hasLrcRoma || false;
+      const { lrc = [], hasYrc = false, hasLrcTran = false, hasLrcRoma = false } = data;
+      Object.assign(this, { lyricsData: lrc, hasYrc, hasLrcTran, hasLrcRoma });
     },
-    
+
     // 更新播放状态
     updatePlayState(data) {
-      this.isPlaying = data.isPlaying || false;
-      this.playSeek = data.playSeek || 0;
-      this.currentLyricIndex = data.lyricIndex || 0;
+      const { isPlaying = false, playSeek = 0, lyricIndex = 0 } = data;
+      Object.assign(this, { isPlaying, playSeek, currentLyricIndex: lyricIndex });
     },
-    
+
     // 更新歌曲信息
     updateSongInfo(data) {
       this.currentSong = data;
     },
-    
+
     // 更新设置
     updateSettings(settings) {
-      this.settings = {
-        ...this.settings,
-        ...settings
-      };
+      Object.assign(this.settings, settings);
     }
   },
   // 持久化到localStorage

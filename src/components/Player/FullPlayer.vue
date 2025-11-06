@@ -64,17 +64,6 @@
               <SvgIcon icon="round-settings" />
             </n-icon>
             
-            <!-- 桌面歌词按钮（仅在Electron环境显示） -->
-            <n-icon 
-              v-if="isElectron && isHasLrc && playMode !== 'dj'"
-              :class="['desktop-lyrics-btn', { active: desktopLyricsEnabled }]"
-              size="28" 
-              @click="toggleDesktopLyrics"
-              @contextmenu="handleRightClick"
-              :title="desktopLyricsEnabled ? '关闭桌面歌词' : '开启桌面歌词'"
-            >
-              <SvgIcon icon="desktop-lyrics" />
-            </n-icon>
             
             <!-- 歌词模式 -->
             <n-icon
@@ -326,7 +315,7 @@ const music = musicData();
 const status = siteStatus();
 const settings = siteSettings();
 const { playList, playSongLyric, playSongSource } = storeToRefs(music);
-const { playerBackgroundType, showYrc, playCoverType, showSpectrums, useAMLyrics, desktopLyricsEnabled, desktopLyricsRightClickToggleLock } = storeToRefs(settings);
+const { playerBackgroundType, showYrc, playCoverType, showSpectrums, useAMLyrics } = storeToRefs(settings);
 
 const {
   playerControlShow,
@@ -343,46 +332,7 @@ const {
 // 检查是否为Electron环境
 const isElectron = computed(() => checkPlatform.electron());
 
-// 切换桌面歌词
-const toggleDesktopLyrics = () => {
-  settings.toggleDesktopLyrics();
-};
 
-// 右击切换锁定状态
-const handleRightClick = (e) => {
-  e.preventDefault();
-  
-  // 检查设置是否启用右击切换锁定
-  if (desktopLyricsRightClickToggleLock.value) {
-    // 设置开启：切换锁定状态
-    if (desktopLyricsEnabled.value) {
-      toggleDesktopLyricsLock();
-    } else {
-      // 如果桌面歌词未开启，先开启再锁定
-      settings.toggleDesktopLyrics();
-      setTimeout(() => {
-        toggleDesktopLyricsLock();
-      }, 100);
-    }
-  } else {
-    // 设置关闭：显示右键菜单或其他功能
-    showContextMenu(e);
-  }
-};
-
-// 切换桌面歌词锁定状态
-const toggleDesktopLyricsLock = () => {
-  if (typeof window.electron !== "undefined") {
-    window.electron.ipcRenderer.send("desktop-lyrics-toggle-lock");
-  }
-};
-
-// 显示右键菜单（设置关闭时的行为）
-const showContextMenu = (e) => {
-  // 可以显示一个简单的右键菜单
-  // 或者执行其他功能
-  console.log("右击功能已禁用，显示菜单或其他功能");
-};
 
 
 // 是否有歌词
@@ -586,11 +536,6 @@ onUnmounted(() => {
         margin-left: 0;
         &.lrc-open {
           &.open {
-            opacity: 0.8;
-          }
-        }
-        &.desktop-lyrics-btn {
-          &.active {
             opacity: 0.8;
           }
         }

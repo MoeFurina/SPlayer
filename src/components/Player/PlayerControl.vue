@@ -120,6 +120,16 @@
         >
           <SvgIcon icon="video" />
         </n-icon>
+        <!-- 桌面歌词 -->
+        <n-icon
+          v-if="playMode !== 'dj'"
+          :class="{ active: desktopLyricsEnabled }"
+          size="22"
+          @click.stop="toggleDesktopLyrics"
+          @contextmenu.stop="handleDesktopLyricsRightClick"
+        >
+          <SvgIcon icon="desktop-lyrics" />
+        </n-icon>
         <!-- 评论 -->
         <n-icon
           v-if="!music.getPlaySongData?.path"
@@ -199,7 +209,7 @@
 
 <script setup>
 import { storeToRefs } from "pinia";
-import { musicData, siteStatus, siteData } from "@/stores";
+import { musicData, siteStatus, siteData, siteSettings } from "@/stores";
 import { useRouter } from "vue-router";
 import {
   playOrPause,
@@ -209,15 +219,23 @@ import {
   setVolume,
   setVolumeMute,
 } from "@/utils/Player";
+import { toggleDesktopLyrics } from "@/utils/desktopLyricsSync";
 import debounce from "@/utils/debounce";
 import VueSlider from "vue-slider-component";
 import "vue-slider-component/theme/default.css";
+
+// 辅助函数：发送桌面歌词 IPC 消息
+const sendDesktopLyricsIpc = (action) => {
+  window.electron?.ipcRenderer.send(action);
+};
 
 const router = useRouter();
 const data = siteData();
 const music = musicData();
 const status = siteStatus();
+const settings = siteSettings();
 const { playList, playListOld } = storeToRefs(music);
+const { desktopLyricsEnabled, desktopLyricsRightClickToggleLock } = storeToRefs(settings);
 const {
   playIndex,
   playerControlShow,
@@ -321,6 +339,24 @@ const jumpToComment = () => {
     },
   });
 };
+
+// 桌面歌词右击处理 - 切换锁定状态
+const handleDesktopLyricsRightClick = (e) => {
+  e.preventDefault();
+  // 检查是否启用右击切换锁定功能
+  if (!desktopLyricsRightClickToggleLock.value) return;
+
+  // 如果桌面歌词已开启，直接切换锁定状态
+  if (desktopLyricsEnabled.value) {
+    sendDesktopLyricsIpc("desktop-lyrics-toggle-lock");
+    return;
+  }
+
+  // 如果桌面歌词未开启，先开启再切换锁定状态
+  toggleDesktopLyrics();
+  setTimeout(() => sendDesktopLyricsIpc("desktop-lyrics-toggle-lock"), 100);
+};
+
 </script>
 
 <style lang="scss" scoped>
@@ -476,6 +512,12 @@ const jumpToComment = () => {
     }
   }
 }
+
+// 桌面歌词激活状态
+.n-icon.active {
+  color: var(--cover-main-color) !important;
+}
+
 // 音量控制
 .slider-content {
   padding: 10px 0px;

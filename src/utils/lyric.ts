@@ -77,13 +77,15 @@ export const parseYrcData = (yrcData: LyricLine[]): any[] => {
       const time = msToS(words[0].startTime);
       const endTime = msToS(words[words.length - 1].endTime);
       
-      const contents = words.map((word) => {
+      const contents = words.map((word, wordIndex) => {
+        const endsWithSpace = word.word.endsWith(" ");
+
         return {
           time: msToS(word.startTime),
           endTime: msToS(word.endTime),
           duration: msToS(word.endTime - word.startTime),
           content: word.word.trim(),
-          endsWithSpace: word.word.endsWith(" "),
+          endsWithSpace: endsWithSpace,
         };
       });
       

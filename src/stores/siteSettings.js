@@ -51,7 +51,7 @@ const useSiteSettingsStore = defineStore("siteSettings", {
       lyricsFont: "HarmonyOS sans", // 歌词字体
       lyricsBlur: true, // 歌词模糊
       lyricsBold: true, // 歌词加粗
-      showYrc: true, // 是否显示逐字歌词
+      showYrc: false, // 是否显示逐字歌词
       showYrcAnimation: true, // 是否显示逐字歌词动画
       lyricsPosition: "left", // 歌词位置
       lyricsBlock: "start", // 歌词滚动位置
@@ -97,44 +97,36 @@ const useSiteSettingsStore = defineStore("siteSettings", {
       proxyServe: "127.0.0.1", // 代理地址
       proxyPort: 80, // 代理端口
       
-      // ==================
       // 桌面歌词设置
-      // ==================
-      
-      // 基础开关
-      desktopLyricsEnabled: false,           // 桌面歌词总开关
-      desktopLyricsAutoShow: false,          // 启动时自动显示
-      desktopLyricsAlwaysOnTop: true,        // 总是置顶
-      desktopLyricsAutoLock: true,           // 自动锁定（10秒后）
+      desktopLyricsEnabled: false, // 桌面歌词总开关
+      desktopLyricsAutoShow: false, // 启动时自动显示
+      desktopLyricsAlwaysOnTop: true, // 总是置顶
+      desktopLyricsAutoLock: false, // 自动锁定
       desktopLyricsRightClickToggleLock: true, // 右击按钮切换锁定
-      
-      // 显示内容
-      desktopLyricsShowTitle: true,          // 显示歌曲标题
-      desktopLyricsShowArtist: true,         // 显示艺术家
-      
-      // 外观设置
-      desktopLyricsLines: 3,                 // 显示行数（3-5）
-      desktopLyricsAlignment: "center",      // 对齐方式：left/center/right
-      desktopLyricsScrollPosition: "center",    // 滚动位置：top/center
-      
-      // 字体设置
-      desktopLyricsFontSize: 36,             // 字体大小
-      desktopLyricsFont: "HarmonyOS sans",   // 字体
-      desktopLyricsBold: true,               // 加粗
-      desktopLyricsColor: "#FFFFFF",         // 主色
+      desktopLyricsShowTitle: true, // 显示歌曲标题
+      desktopLyricsShowArtist: true, // 显示艺术家
+      desktopLyricsLines: 3, // 显示行数
+      desktopLyricsAlignment: "center", // 对齐方式：left/center/right
+      desktopLyricsScrollPosition: "center", // 滚动位置：top/center
+      desktopLyricsFontSize: 20, // 字体大小
+      desktopLyricsTitleFontSize: 15, // 作品信息字号
+      desktopLyricsTranFontSize: 15, // 翻译字号
+      desktopLyricsRomaFontSize: 15, // 罗马音字号
+      desktopLyricsFont: "HarmonyOS sans", // 字体
+      desktopLyricsBold: true, // 加粗
+      desktopLyricsColor: "#FFFFFF", // 主色
       desktopLyricsColorSecondary: "#999999", // 次色
-      desktopLyricsStroke: false,            // 描边
-      desktopLyricsStrokeColor: "#000000",   // 描边颜色
-      desktopLyricsStrokeWidth: 1,           // 描边宽度
-      
-      // 透明度设置
-      desktopLyricsOpacity: 0.9,             // 窗口透明度（0-1）
-      desktopLyricsHoverOpacity: 0.95,       // 鼠标移入透明度
-      desktopLyricsHoverThreshold: 300,      // 快速移入移出阈值（毫秒）
-      
-      // 交互设置
-      desktopLyricsHoverPause: true,         // 鼠标移入暂停滚动
-      desktopLyricsClickJump: true,          // 点击歌词跳转播放
+      desktopLyricsStroke: false, // 描边
+      desktopLyricsStrokeColor: "#000000", // 描边颜色
+      desktopLyricsStrokeWidth: 1, // 描边宽度
+      desktopLyricsLineSpacing: 40, // 行间距
+      desktopLyricsLetterSpacing: 0, // 字间距
+      desktopLyricsOpacity: 0.8, // 歌词文字透明度
+      desktopLyricsHoverOpacity: 0.5, // 锁定状态鼠标移入透明度
+      desktopLyricsHoverThreshold: 300, // 快速移入移出阈值
+      desktopLyricsWindowOpacity: 0.6, // 桌面歌词框透明度
+      desktopLyricsHoverPause: true, // 鼠标移入暂停滚动
+      desktopLyricsClickJump: true, // 点击歌词跳转播放
     };
   },
   getters: {},
@@ -169,131 +161,6 @@ const useSiteSettingsStore = defineStore("siteSettings", {
         "--main-font-family-lyric",
         `"${font}", "HarmonyOS_Regular", system-ui, -apple-system, sans-serif`,
       );
-    },
-    
-    // 切换桌面歌词开关
-    toggleDesktopLyrics() {
-      // 如果已经在处理中，不再重复处理
-      if (this._isTogglingLyrics) {
-        console.log("桌面歌词切换操作进行中，忽略重复调用");
-        return;
-      }
-      
-      // 设置锁定标记，防止重复调用
-      this._isTogglingLyrics = true;
-      
-      try {
-        // 计算新状态
-        const newState = !this.desktopLyricsEnabled;
-        
-        // 先更新本地状态，防止多次触发
-        this.desktopLyricsEnabled = newState;
-        
-        console.log(`桌面歌词状态切换: ${newState ? '开启' : '关闭'}`);
-        
-        // 通知主进程切换窗口显示
-        if (typeof electron !== "undefined") {
-          // 直接发送确切的显示或隐藏命令，而不是toggle
-          const command = newState ? "desktop-lyrics-show" : "desktop-lyrics-hide";
-          console.log(`发送命令: ${command}`);
-          
-          // 发送IPC命令
-          electron.ipcRenderer.send(command);
-          
-          // 如果是开启，则同步设置和歌词数据
-          if (newState) {
-            // 延迟一点再同步设置和数据，确保窗口已创建
-            setTimeout(() => {
-              this.syncDesktopLyricsSettings();
-              
-              // 导入并调用同步所有数据的函数
-              try {
-                import('@/utils/desktopLyricsSync').then(module => {
-                  console.log("开启桌面歌词后，手动触发数据同步");
-                  module.syncAllToDesktopLyrics();
-                }).catch(err => {
-                  console.error("导入同步模块失败:", err);
-                });
-              } catch (syncError) {
-                console.error("同步歌词数据失败:", syncError);
-              }
-            }, 300);
-          }
-          
-          // 显示提示消息
-          $message.info(
-            newState ? "桌面歌词已开启" : "桌面歌词已关闭",
-            { showIcon: false }
-          );
-        }
-        
-        // 延迟解除锁定，防止快速连续点击
-        setTimeout(() => {
-          this._isTogglingLyrics = false;
-        }, 500);
-      } catch (error) {
-        console.error("桌面歌词切换出错:", error);
-        // 确保即使出错也解除锁定
-        this._isTogglingLyrics = false;
-      }
-    },
-    
-    // 同步当前桌面歌词设置到窗口
-    syncDesktopLyricsSettings() {
-      if (typeof electron !== "undefined") {
-        try {
-          // 同步所有桌面歌词相关设置
-          const settings = {
-            desktopLyricsShowTitle: this.desktopLyricsShowTitle,
-            desktopLyricsShowArtist: this.desktopLyricsShowArtist,
-            desktopLyricsFontSize: this.desktopLyricsFontSize,
-            desktopLyricsAlignment: this.desktopLyricsAlignment,
-            desktopLyricsScrollPosition: this.desktopLyricsScrollPosition,
-            desktopLyricsHoverPause: this.desktopLyricsHoverPause,
-            desktopLyricsClickJump: this.desktopLyricsClickJump,
-            desktopLyricsOpacity: this.desktopLyricsOpacity,
-            desktopLyricsHoverOpacity: this.desktopLyricsHoverOpacity,
-            desktopLyricsRightClickToggleLock: this.desktopLyricsRightClickToggleLock,
-            showTransl: this.showTransl,
-            showRoma: this.showRoma,
-            showYrc: this.showYrc
-          };
-          
-          console.log("同步桌面歌词设置到窗口");
-          console.log("主窗口桌面歌词滚动位置设置值:", settings.desktopLyricsScrollPosition);
-          electron.ipcRenderer.send("desktop-lyrics-update-settings", settings);
-        } catch (error) {
-          console.error("同步桌面歌词设置失败：", error);
-        }
-      }
-    },
-    
-    // 更新桌面歌词设置
-    updateDesktopLyricsSettings(settings) {
-      // 更新本地设置
-      Object.assign(this, settings);
-      
-      // 通知主进程更新设置
-      if (typeof electron !== "undefined") {
-        console.log("更新桌面歌词设置并同步");
-        console.log("更新后的桌面歌词滚动位置设置值:", settings.desktopLyricsScrollPosition);
-        electron.ipcRenderer.send("desktop-lyrics-update-settings", settings);
-      }
-    },
-    
-    // 强制清除桌面歌词启用状态（用于错误处理）
-    forceClearDesktopLyricsEnabled() {
-      // 不使用toggleDesktopLyrics方法，以避免触发IPC通信
-      console.log("强制清除桌面歌词启用状态");
-      this.desktopLyricsEnabled = false;
-      this._isTogglingLyrics = false;
-    },
-    
-    // 强制重置桌面歌词滚动位置为居中（调试用）
-    forceResetScrollPosition() {
-      console.log("强制重置桌面歌词滚动位置为居中");
-      this.desktopLyricsScrollPosition = "center";
-      this.syncDesktopLyricsSettings();
     }
   },
   

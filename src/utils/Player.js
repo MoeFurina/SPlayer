@@ -3,6 +3,11 @@ import { musicData, siteStatus, siteSettings } from "@/stores";
 import { getSongUrl, getSongLyric, songScrobble, getMusicNumUrlNew, getSongLyricLegacy, getSongTTML } from "@/api/song";
 import { checkPlatform, getLocalCoverData, getBlobUrlFromUrl } from "@/utils/helper";
 import { syncPlayStateToDesktopLyrics, syncLyricDataToDesktopLyrics, syncSongInfoToDesktopLyrics } from "@/utils/desktopLyricsSync";
+
+// 桌面歌词同步辅助函数
+const shouldSyncDesktopLyrics = () => {
+  return checkPlatform.electron() && siteSettings().desktopLyricsEnabled;
+};
 import { decode as base642Buffer } from "@/utils/base64";
 import { getSongPlayTime } from "@/utils/time.ts";
 import { getCoverGradient } from "@/utils/cover-color";
@@ -30,11 +35,11 @@ let spectrumsData = {
 // 默认标题
 let defaultTitle = document.title;
 
-// ✅ 添加快捷键监听器初始化标志
+// 添加快捷键监听器初始化标志
 let shortcutListenersInitialized = false;
 
 /**
- * ✅ 安全地初始化快捷键监听器
+ * 安全地初始化快捷键监听器
  */
 const initShortcutListeners = () => {
   if (shortcutListenersInitialized || !checkPlatform.electron()) return;
@@ -46,9 +51,7 @@ const initShortcutListeners = () => {
       return;
     }
 
-    // ✅ 在回调函数内部才调用 store，确保 Pinia 已初始化
     ipcRenderer.on("shortcut-playOrPause", () => {
-      // 使用切换逻辑而不是仅播放
       playOrPause();
     });
 
@@ -86,7 +89,7 @@ const initShortcutListeners = () => {
  */
 export const initPlayer = async (playNow = false) => {
   try {
-    // ✅ 在播放器初始化时初始化快捷键监听器
+    // 在播放器初始化时初始化快捷键监听器
     initShortcutListeners();
     // 停止播放器
     soundStop();
@@ -172,6 +175,11 @@ export const initPlayer = async (playNow = false) => {
     }
     // 获取歌词
     if (playMode !== "dj") getSongLyricData(isLocalSong, playSongData);
+    // 同步歌曲信息到桌面歌词窗口
+    if (shouldSyncDesktopLyrics()) {
+      syncSongInfoToDesktopLyrics();
+      syncLyricDataToDesktopLyrics();
+    }
     // 初始化媒体会话控制
     initMediaSession(playSongData, cover, isLocalSong, playMode === "dj");
     // 获取图片主色
@@ -373,8 +381,7 @@ export const createPlayer = async (src, autoPlay = true) => {
       window.electron?.ipcRenderer?.send("songStateChange", true);
       
       // 同步播放状态到桌面歌词
-      const settings = siteSettings();
-      if (settings.desktopLyricsEnabled) {
+      if (shouldSyncDesktopLyrics()) {
         syncPlayStateToDesktopLyrics();
       }
     }
@@ -392,8 +399,7 @@ export const createPlayer = async (src, autoPlay = true) => {
         window.electron?.ipcRenderer?.send("songStateChange", false);
         
         // 同步播放状态到桌面歌词
-        const settings = siteSettings();
-        if (settings.desktopLyricsEnabled) {
+        if (shouldSyncDesktopLyrics()) {
           syncPlayStateToDesktopLyrics();
         }
       }
@@ -508,10 +514,8 @@ export const changePlayIndex = async (type = "next", play = false) => {
       music.playSongData = songData;
       
       // 同步歌曲信息到桌面歌词窗口
-      const settings = siteSettings();
-      if (checkPlatform.electron() && settings.desktopLyricsEnabled) {
+      if (shouldSyncDesktopLyrics()) {
         syncSongInfoToDesktopLyrics();
-        // 同步歌词数据到桌面歌词窗口
         syncLyricDataToDesktopLyrics();
       }
       
@@ -600,14 +604,9 @@ export const playOrPause = async () => {
   const status = player?.playing();
   fadePlayOrPause(status ? "pause" : "play");
   // 立即同步一次播放状态到桌面歌词，避免图标回弹
-  try {
-    const settings = siteSettings();
-    if (checkPlatform.electron() && settings.desktopLyricsEnabled) {
-      setTimeout(() => {
-        try { syncPlayStateToDesktopLyrics(); } catch (_) {}
-      }, 60);
-    }
-  } catch (_) {}
+  if (shouldSyncDesktopLyrics()) {
+    setTimeout(syncPlayStateToDesktopLyrics, 60);
+  }
 };
 
 /**
@@ -655,6 +654,17 @@ export const setVolumeMute = () => {
  */
 export const setSeek = (seek = 0) => {
   player?.seek(seek);
+  const status = siteStatus();
+  status.playSeek = seek;
+
+  // 如果启用逐字歌词，立即同步播放状态
+  if (shouldSyncDesktopLyrics()) {
+    const settings = siteSettings();
+    const music = musicData();
+    if (settings.showYrc && music.playSongLyric.hasYrc) {
+      requestAnimationFrame(syncPlayStateToDesktopLyrics);
+    }
+  }
 };
 
 /**
@@ -666,6 +676,14 @@ export const getSeek = () => {
     return player.seek();
   }
   return 0;
+};
+
+/**
+ * 检查播放器是否正在播放
+ * @return {boolean} isPlaying - 播放器是否正在播放
+ */
+export const isPlaying = () => {
+  return player?.playing() || false;
 };
 
 /**
@@ -685,12 +703,22 @@ const setAudioTime = () => {
     // 计算当前歌词播放索引
     const lrcType = !music.playSongLyric.hasYrc || !settings.showYrc;
     const lyrics = lrcType ? music.playSongLyric.lrc : music.playSongLyric.yrc;
-    const lyricsIndex = lyrics?.findIndex((v) => v?.time >= currentTime);
+    
+    let newLyricIndex = -1;
+    if (lyrics && lyrics.length > 0) {
+      const lyricsIndex = lyrics.findIndex((v) => v?.time >= currentTime);
+      if (lyricsIndex === -1) {
+        newLyricIndex = lyrics.length - 1;
+      } else if (lyricsIndex === 0) {
+        newLyricIndex = lyrics[0].time <= currentTime ? 0 : -1;
+      } else {
+        newLyricIndex = lyricsIndex - 1;
+      }
+    }
+    
     // 赋值数据
     status.playTimeData = { currentTime, duration, bar, played, durationTime };
     
-    // 更新歌词索引
-    const newLyricIndex = lyricsIndex === -1 ? lyrics.length - 1 : lyricsIndex - 1;
     const lyricIndexChanged = status.playSongLyricIndex !== newLyricIndex;
     status.playSongLyricIndex = newLyricIndex;
     
@@ -700,10 +728,9 @@ const setAudioTime = () => {
       if (settings.showTaskbarProgress) {
         window.electron.ipcRenderer.send("setProgressBar", bar);
       }
-      
-      // 同步桌面歌词播放状态（包含当前歌词索引）
-      // 为减少IPC通信频率，只在歌词索引变化时发送
-      if (lyricIndexChanged && settings.desktopLyricsEnabled) {
+
+      // 同步播放状态到桌面歌词（歌词索引变化时）
+      if (shouldSyncDesktopLyrics() && lyricIndexChanged) {
         syncPlayStateToDesktopLyrics();
       }
     }
@@ -711,13 +738,32 @@ const setAudioTime = () => {
 };
 
 /**
- * 更改播放进度（频繁）
+ * 高频更新播放进度 - 用于逐字歌词实时同步
+ * 仅在启用逐字歌词时调用
  */
-const justSetSeek = () => {
-  if (player?.playing()) {
+const syncYrcPlayState = () => {
+  if (!shouldSyncDesktopLyrics()) return;
+
+  const settings = siteSettings();
+  const music = musicData();
+
+  // 仅在启用逐字歌词且有逐字歌词数据时同步
+  if (settings.showYrc && music.playSongLyric.hasYrc) {
     const status = siteStatus();
-    status.playSeek = getSeek();
-    requestAnimationFrame(justSetSeek);
+    const currentSeek = getSeek(); // 实时获取当前播放进度
+
+    // 更新 status.playSeek 确保数据一致性
+    status.playSeek = currentSeek;
+
+    const isActuallyPlaying = isPlaying();
+
+    // 直接发送 IPC 消息，确保逐字歌词实时更新
+    window.electron.ipcRenderer.send("desktop-lyrics-update-play-state", {
+      isPlaying: isActuallyPlaying,
+      seek: currentSeek,
+      lyricIndex: status.playSongLyricIndex,
+      timestamp: Date.now()
+    });
   }
 };
 
@@ -803,8 +849,7 @@ const getSongLyricData = async (islocal, data) => {
   }
   
   // 同步歌词数据到桌面歌词窗口
-  const settings = siteSettings();
-  if (checkPlatform.electron() && settings.desktopLyricsEnabled) {
+  if (shouldSyncDesktopLyrics()) {
     syncLyricDataToDesktopLyrics();
   }
 };
@@ -1008,13 +1053,9 @@ export const playAllSongs = async (playlist, mode = "normal") => {
   }
 };
 
-/*
- * 清除定时器
- */
 const cleanAllInterval = () => {
   clearInterval(seekInterval);
-  // clearInterval(justSeekInterval);
-  cancelAnimationFrame(justSeekInterval);
+  clearInterval(justSeekInterval);
   seekInterval = null;
   justSeekInterval = null;
 };
@@ -1024,8 +1065,7 @@ const cleanAllInterval = () => {
  */
 const setAllInterval = () => {
   cleanAllInterval();
-  // 启动定时器
   seekInterval = setInterval(() => setAudioTime(), 250);
-  // justSeekInterval = setInterval(() => justSetSeek(), 17);
-  justSeekInterval = requestAnimationFrame(justSetSeek);
+  // 高频同步逐字歌词播放状态（约60fps）
+  justSeekInterval = setInterval(() => syncYrcPlayState(), 16);
 };

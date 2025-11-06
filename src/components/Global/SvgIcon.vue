@@ -4,36 +4,33 @@
     <slot />
   </template>
   <template v-else>
-    <svg v-if="!isSpecial" class="svg-icon" xmlns="http://www.w3.org/2000/svg" :width="width" :height="height"
-      :style="size ? `font-size:${size}px` : null" viewBox="0 0 24 24">
+    <!-- 普通图标渲染 -->
+    <svg v-if="!isSpecial" class="svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
       <path fill="currentColor" :d="iconData[icon]" />
     </svg>
     <!-- 特殊图标处理 -->
     <template v-else>
       <!-- 随机播放 -->
-      <svg v-if="icon === 'shuffle'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32"
-        viewBox="0 0 24 24">
+      <svg v-if="icon === 'shuffle'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
         <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
           d="M3 17h2.735a4 4 0 0 0 3.43-1.942l3.67-6.116A4 4 0 0 1 16.265 7H21m0 0l-2-2m2 2l-2 2M3 7h2.735a4 4 0 0 1 2.871 1.215M21 17h-4.735a4 4 0 0 1-2.871-1.215M21 17l-2 2m2-2l-2-2" />
       </svg>
       <!-- 列表循环 -->
-      <svg v-if="icon === 'repeat-list'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32"
-        viewBox="0 0 24 24">
+      <svg v-if="icon === 'repeat-list'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
         <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2">
           <path stroke-linejoin="round" d="m19 5l2 2m0 0l-2 2m2-2H7M5 19l-2-2m0 0l2-2m-2 2h14" />
           <path d="M3 11a4 4 0 0 1 4-4m14 6a4 4 0 0 1-4 4" />
         </g>
       </svg>
       <!-- 单曲循环 -->
-      <svg v-if="icon === 'repeat-song'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32"
-        viewBox="0 0 24 24">
+      <svg v-if="icon === 'repeat-song'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
         <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2">
           <path stroke-linejoin="round" d="M21 9V4l-2 1m-4 2H7M5 19l-2-2m0 0l2-2m-2 2h14" />
           <path d="M3 11a4 4 0 0 1 4-4m14 6a4 4 0 0 1-4 4" />
         </g>
       </svg>
       <!-- 心动模式 -->
-      <svg v-if="icon === 'heartbit'" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 48 48">
+      <svg v-if="icon === 'heartbit'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
         <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="4">
           <path stroke-miterlimit="2" d="m11 32l7-9l6 9l6-9l5 8h9" />
           <path
@@ -41,7 +38,7 @@
         </g>
       </svg>
       <!-- 刷新图标 -->
-      <svg v-if="icon === 'refresh'" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="100" height="100" viewBox="0 0 30 30">
+      <svg v-if="icon === 'refresh'" class="svg-icon" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 30 30">
         <path
           d="M 15 3 C 12.031398 3 9.3028202 4.0834384 7.2070312 5.875 A 1.0001 1.0001 0 1 0 8.5058594 7.3945312 C 10.25407 5.9000929 12.516602 5 15 5 C 20.19656 5 24.450989 8.9379267 24.951172 14 L 22 14 L 26 20 L 30 14 L 26.949219 14 C 26.437925 7.8516588 21.277839 3 15 3 z M 4 10 L 0 16 L 3.0507812 16 C 3.562075 22.148341 8.7221607 27 15 27 C 17.968602 27 20.69718 25.916562 22.792969 24.125 A 1.0001 1.0001 0 1 0 21.494141 22.605469 C 19.74593 24.099907 17.483398 25 15 25 C 9.80344 25 5.5490109 21.062074 5.0488281 16 L 8 16 L 4 10 z">
         </path>
@@ -52,6 +49,7 @@
 
 <script setup>
 import iconData from "@/assets/icon.json";
+import { computed } from "vue";
 
 // eslint-disable-next-line no-unused-vars
 const props = defineProps({
@@ -68,7 +66,7 @@ const props = defineProps({
     default: "32",
   },
   size: {
-    type: String,
+    type: [String, Number],
   },
   showSlot: {
     type: Boolean,
@@ -80,4 +78,8 @@ const props = defineProps({
     default: false,
   },
 });
+
+// 计算实际使用的尺寸（仅用于特殊图标）
+const actualWidth = computed(() => props.size ? String(props.size) : props.width);
+const actualHeight = computed(() => props.size ? String(props.size) : props.height);
 </script>

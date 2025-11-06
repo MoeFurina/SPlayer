@@ -139,9 +139,11 @@
 </template>
 
 <script setup>
+import { ref, onMounted, onUnmounted } from "vue";
 import { storeToRefs } from "pinia";
 import { musicData, siteSettings, siteStatus } from "@/stores";
-import { setSeek, fadePlayOrPause } from "@/utils/Player";
+import { setSeek, fadePlayOrPause, getSeek } from "@/utils/Player";
+import { useRafFn } from '@vueuse/core';
 
 // eslint-disable-next-line no-unused-vars
 const props = defineProps({
@@ -155,8 +157,14 @@ const props = defineProps({
 const music = musicData();
 const settings = siteSettings();
 const status = siteStatus();
-const { playSeek, pureLyricMode, playSongLyricIndex } = storeToRefs(status);
+const { pureLyricMode, playSongLyricIndex } = storeToRefs(status);
 const { playSongLyric } = storeToRefs(music);
+
+const playSeek = ref(getSeek());
+
+const { pause: pauseSeek, resume: resumeSeek } = useRafFn(() => {
+  playSeek.value = getSeek();
+});
 const {
   showYrc,
   showYrcAnimation,
@@ -203,40 +211,58 @@ const lyricsScroll = (index) => {
 // 逐字歌词样式计算
 const getYrcStyle = (wordData, lyricIndex) => {
   if (showYrcAnimation.value) {
-    // 如果当前歌词索引与播放歌曲的歌词索引不匹配
     if (playSongLyricIndex.value !== lyricIndex) {
       return {
         transitionDuration: `0ms, 0ms, 0.35s`,
         transitionDelay: `0ms`,
+        WebkitMaskPositionX: `100%`,
       };
     }
-    // 如果播放状态不是加载中，且当前单词的时间加上持续时间减去播放进度大于 0
-    if (status.playLoading === false && wordData.time + wordData.duration - playSeek.value > 0) {
+    
+    const currentSeek = playSeek.value;
+    
+    if (status.playLoading === false && 
+        wordData.time <= currentSeek && 
+        currentSeek < wordData.time + wordData.duration) {
+      const progress = Math.max(0, Math.min(1, (currentSeek - wordData.time) / wordData.duration));
       return {
         transitionDuration: `0s, 0s, 0.35s`,
         transitionDelay: `0ms`,
-        WebkitMaskPositionX: `${
-          100 - Math.max(((playSeek.value - wordData.time) / wordData.duration) * 100, 0)
-        }%`,
+        WebkitMaskPositionX: `${100 - progress * 100}%`,
       };
     }
-    // 如果以上条件都不满足
+    
+    if (currentSeek >= wordData.time + wordData.duration) {
+      return {
+        transitionDuration: `0s, 0s, 0.35s`,
+        transitionDelay: `0ms`,
+        WebkitMaskPositionX: `0%`,
+      };
+    }
+    
     return {
-      transitionDuration: `${wordData.duration}ms, ${wordData.duration * 0.8}ms, 0.35s`,
-      transitionDelay: `${wordData.time - playSeek.value}ms, ${
-        wordData.time - playSeek.value + wordData.duration * 0.5
+      transitionDuration: `${wordData.duration * 1000}ms, ${wordData.duration * 800}ms, 0.35s`,
+      transitionDelay: `${Math.max(0, (wordData.time - currentSeek) * 1000)}ms, ${
+        Math.max(0, (wordData.time - currentSeek) * 1000) + wordData.duration * 500
       }ms, 0ms`,
+      WebkitMaskPositionX: `100%`,
     };
   } else {
-    // 如果当前歌词索引与播放歌曲的歌词索引不匹配，或者播放状态不是加载中且当前单词的时间大于等于播放进度
-    if (
-      playSongLyricIndex.value !== lyricIndex ||
-      (status.playLoading === false && wordData.time >= playSeek.value)
-    ) {
+    const currentSeek = playSeek.value;
+    
+    if (playSongLyricIndex.value !== lyricIndex) {
       return { opacity: 0 };
     }
-    // 如果以上条件都不满足
-    return { opacity: 1 };
+    
+    if (currentSeek >= wordData.time + wordData.duration) {
+      return { opacity: 1 };
+    }
+    
+    if (wordData.time <= currentSeek) {
+      return { opacity: 1 };
+    }
+    
+    return { opacity: 0 };
   }
 };
 
@@ -265,9 +291,15 @@ watch(
 );
 
 onMounted(() => {
+  resumeSeek();
+  
   nextTick().then(() => {
     lyricsScroll(playSongLyricIndex.value);
   });
+});
+
+onUnmounted(() => {
+  pauseSeek();
 });
 </script>
 
