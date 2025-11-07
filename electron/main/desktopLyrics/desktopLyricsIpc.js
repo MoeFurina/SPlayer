@@ -1,6 +1,8 @@
 // 桌面歌词 IPC 事件统一注册
 // 负责主窗口与桌面歌词窗口之间的所有 IPC 通信
 
+import { screen } from "electron";
+
 /**
  * 注册所有桌面歌词相关的 IPC 事件
  * @param {Electron.IpcMain} ipcMain IPC 主进程对象
@@ -110,9 +112,24 @@ export const registerDesktopLyricsIpc = (ipcMain, manager, mainWindow, store) =>
     if (!isDesktopLyricsWindowValid()) return;
 
     const bounds = manager.window.getBounds();
+
+    let logicalDeltaX = deltaX;
+    let logicalDeltaY = deltaY;
+
+    // 仅在 Windows 上修复 DPI 缩放问题
+    // macOS 的 screenX/Y 已经是逻辑像素，不需要转换
+    if (process.platform === "win32") {
+      const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+      const scaleFactor = display.scaleFactor || 1;
+
+      // Windows 的 screenX/Y 返回物理像素，需要转换为逻辑像素
+      logicalDeltaX = Math.round(deltaX / scaleFactor);
+      logicalDeltaY = Math.round(deltaY / scaleFactor);
+    }
+
     manager.window.setBounds({
-      x: bounds.x + deltaX,
-      y: bounds.y + deltaY,
+      x: bounds.x + logicalDeltaX,
+      y: bounds.y + logicalDeltaY,
       width: bounds.width,
       height: bounds.height,
     });

@@ -118,6 +118,8 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { checkPlatform } from "@/utils/helper";
+import gsap from "gsap";
 
 // 组件属性定义
 const props = defineProps({
@@ -397,24 +399,43 @@ const scrollToLyric = (index) => {
       return;
     }
 
-    const containerHeight = container.clientHeight;
-    const elementTop = el.offsetTop;
-    const elementHeight = el.clientHeight;
-    const currentScrollTop = container.scrollTop;
+    const isWindows = checkPlatform.windows();
 
-    const elementTopInView = elementTop - currentScrollTop;
-    const elementBottomInView = elementTopInView + elementHeight;
+    if (isWindows) {
+      // Windows 使用 GSAP 实现平滑滚动
+      const containerRect = container.getBoundingClientRect();
+      const elementRect = el.getBoundingClientRect();
+      const currentScrollTop = container.scrollTop;
 
-    if (props.scrollPosition === "center") {
-      el.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
+      let targetScrollTop;
+
+      if (props.scrollPosition === "center") {
+        const elementCenter = elementRect.top - containerRect.top + currentScrollTop + elementRect.height / 2;
+        const containerCenter = containerRect.height / 2;
+        targetScrollTop = elementCenter - containerCenter;
+      } else {
+        targetScrollTop = elementRect.top - containerRect.top + currentScrollTop;
+      }
+
+      gsap.to(container, {
+        scrollTop: targetScrollTop,
+        duration: 0.5,
+        ease: "power2.out",
+        overwrite: true
       });
     } else {
-      el.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
+      // macOS/Linux 使用原生平滑滚动
+      if (props.scrollPosition === "center") {
+        el.scrollIntoView({
+          behavior: "smooth",
+          block: "center"
+        });
+      } else {
+        el.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
     }
   });
 };
@@ -430,7 +451,20 @@ watch(
   ],
   ([currentIndex, lyricsData, yrcData, showYrc, isPlaying], [oldIndex, oldLyricsData, oldYrcData, oldShowYrc, oldIsPlaying]) => {
     if (currentIndex !== oldIndex) {
-      forceScrollToCurrent();
+      // 延迟滚动，等待逐字歌词 DOM 完全渲染
+      nextTick(() => {
+        const isWindows = checkPlatform.windows();
+
+        if (isWindows) {
+          // Windows GSAP 滚动无需额外延迟
+          forceScrollToCurrent();
+        } else {
+          // macOS/Linux 原生滚动等待一帧确保 DOM 稳定
+          requestAnimationFrame(() => {
+            forceScrollToCurrent();
+          });
+        }
+      });
       return;
     }
 
@@ -441,7 +475,14 @@ watch(
 
     if (hasLyricsDataChanged || hasYrcDataChanged || hasShowYrcChanged || hasPlayingChanged) {
       nextTick(() => {
-        forceScrollToCurrent();
+        const isWindows = checkPlatform.windows();
+        if (isWindows) {
+          forceScrollToCurrent();
+        } else {
+          requestAnimationFrame(() => {
+            forceScrollToCurrent();
+          });
+        }
       });
     }
   }
