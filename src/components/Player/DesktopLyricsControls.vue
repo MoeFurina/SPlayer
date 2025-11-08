@@ -161,6 +161,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
+import { useWindowDragOptimization } from "@/utils/useWindowDrag";
 import SvgIcon from "@/components/Global/SvgIcon.vue";
 
 // 发送 IPC 消息
@@ -558,8 +559,21 @@ const sendControl = (action, value) => {
 // 控制栏拖拽处理
 const dragState = ref({ active: false, moved: false, lastX: 0, lastY: 0 });
 
+// 使用 RAF 批处理优化工具
+const dragOptimizer = useWindowDragOptimization();
+
 const handleDragAreaMouseDown = (e) => {
   dragState.value = { active: true, moved: false, lastX: e.screenX, lastY: e.screenY };
+
+  // 重置 RAF 批处理状态
+  dragOptimizer.reset();
+
+  // 通知主进程拖动开始
+  sendIpc("desktop-lyrics-window-drag-start", {
+    x: e.screenX,
+    y: e.screenY,
+  });
+
   document.addEventListener("mousemove", handleDragMove);
   document.addEventListener("mouseup", handleDragEnd);
   document.addEventListener("click", preventClickAfterDrag, true);
@@ -568,16 +582,30 @@ const handleDragAreaMouseDown = (e) => {
 const handleDragMove = (e) => {
   if (!dragState.value.active) return;
   dragState.value.moved = true;
-  sendIpc("desktop-lyrics-window-move", {
-    deltaX: e.screenX - dragState.value.lastX,
-    deltaY: e.screenY - dragState.value.lastY
-  });
+
+  // 计算本次移动的 delta
+  const moveDeltaX = e.screenX - dragState.value.lastX;
+  const moveDeltaY = e.screenY - dragState.value.lastY;
   dragState.value.lastX = e.screenX;
   dragState.value.lastY = e.screenY;
+
+  // 使用 RAF 批处理累积并发送 delta
+  dragOptimizer.accumulateDelta(moveDeltaX, moveDeltaY, (deltaX, deltaY) => {
+    sendIpc("desktop-lyrics-window-move", { deltaX, deltaY });
+  });
 };
 
 const handleDragEnd = () => {
   dragState.value.active = false;
+
+  // 清理并发送剩余的 delta
+  dragOptimizer.flush((deltaX, deltaY) => {
+    sendIpc("desktop-lyrics-window-move", { deltaX, deltaY });
+  });
+
+  // 通知主进程拖动结束
+  sendIpc("desktop-lyrics-window-drag-end");
+
   document.removeEventListener("mousemove", handleDragMove);
   document.removeEventListener("mouseup", handleDragEnd);
   setTimeout(() => {

@@ -99,6 +99,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useWindowDragOptimization } from "@/utils/useWindowDrag";
 import DesktopLyricsContent from "./DesktopLyricsContent.vue";
 import DesktopLyricsControls from "./DesktopLyricsControls.vue";
 
@@ -252,6 +253,10 @@ let lastMoveScreenX = 0;
 let lastMoveScreenY = 0;
 let hasDragged = false;
 let dragStartTime = 0;
+
+// 使用 RAF 批处理优化工具
+const dragOptimizer = useWindowDragOptimization();
+
 const handleDragStart = (e) => {
   if (isLocked.value || isResizing) return;
 
@@ -271,6 +276,15 @@ const handleDragStart = (e) => {
   lastMoveScreenX = e.screenX;
   lastMoveScreenY = e.screenY;
 
+  // 重置 RAF 批处理状态
+  dragOptimizer.reset();
+
+  // 通知主进程拖动开始 (用于初始化缓存)
+  sendIpc("desktop-lyrics-window-drag-start", {
+    x: e.screenX,
+    y: e.screenY,
+  });
+
   document.addEventListener("mousemove", handleDragMove);
   document.addEventListener("mouseup", handleDragEnd);
 
@@ -278,26 +292,27 @@ const handleDragStart = (e) => {
   document.body.style.cursor = "move";
 };
 
-// 处理拖拽移动
+// 处理拖拽移动 - 使用 RAF 批处理优化性能
 const handleDragMove = (e) => {
   if (!isDragging) return;
-  
+
   const deltaX = Math.abs(e.screenX - dragStartX);
   const deltaY = Math.abs(e.screenY - dragStartY);
   const moveThreshold = 5;
-  
+
   if (deltaX > moveThreshold || deltaY > moveThreshold) {
     hasDragged = true;
   }
+
+  // 计算本次移动的 delta
   const moveDeltaX = e.screenX - lastMoveScreenX;
   const moveDeltaY = e.screenY - lastMoveScreenY;
   lastMoveScreenX = e.screenX;
   lastMoveScreenY = e.screenY;
 
-  // 发送窗口移动消息到主进程
-  sendIpc("desktop-lyrics-window-move", {
-    deltaX: moveDeltaX,
-    deltaY: moveDeltaY,
+  // 使用 RAF 批处理累积并发送 delta
+  dragOptimizer.accumulateDelta(moveDeltaX, moveDeltaY, (deltaX, deltaY) => {
+    sendIpc("desktop-lyrics-window-move", { deltaX, deltaY });
   });
 };
 
@@ -308,17 +323,25 @@ const handleDragEnd = () => {
   document.removeEventListener("mousemove", handleDragMove);
   document.removeEventListener("mouseup", handleDragEnd);
   document.body.style.cursor = "default";
-  
+
+  // 清理并发送剩余的 delta
+  dragOptimizer.flush((deltaX, deltaY) => {
+    sendIpc("desktop-lyrics-window-move", { deltaX, deltaY });
+  });
+
+  // 通知主进程拖动结束 (用于清理缓存)
+  sendIpc("desktop-lyrics-window-drag-end");
+
   if (hasDragged) {
     if (clickProtectionTimer) {
       clearTimeout(clickProtectionTimer);
     }
-    
+
     clickProtectionTimer = setTimeout(() => {
       clickProtectionTimer = null;
     }, 200);
   }
-  
+
   hasDragged = false;
 };
 

@@ -3,6 +3,9 @@
 
 import { screen } from "electron";
 
+// 拖动缓存对象 - 用于优化 Windows 平台透明窗口拖动性能
+let dragCache = null;
+
 /**
  * 注册所有桌面歌词相关的 IPC 事件
  * @param {Electron.IpcMain} ipcMain IPC 主进程对象
@@ -107,32 +110,53 @@ export const registerDesktopLyricsIpc = (ipcMain, manager, mainWindow, store) =>
     sendToMainWindow("desktop-lyrics-control", action);
   });
 
-  // 窗口操作
+  // 窗口拖动开始 - 初始化缓存以优化性能
+  ipcMain.on("desktop-lyrics-window-drag-start", (_, { x, y }) => {
+    if (!isDesktopLyricsWindowValid()) return;
+
+    // Windows 平台启用缓存优化
+    if (process.platform === "win32") {
+      const bounds = manager.window.getBounds();
+
+      dragCache = {
+        currentX: bounds.x,
+        currentY: bounds.y,
+      };
+    }
+  });
+
+  // 窗口拖动移动 - 使用缓存优化性能
   ipcMain.on("desktop-lyrics-window-move", (_, { deltaX, deltaY }) => {
     if (!isDesktopLyricsWindowValid()) return;
 
-    const bounds = manager.window.getBounds();
+    // Windows 平台：使用缓存的位置,避免重复调用 getBounds
+    // 注意: e.screenX/screenY 已经是逻辑像素,不需要 DPI 转换
+    if (process.platform === "win32" && dragCache) {
+      // 更新缓存的位置
+      dragCache.currentX += deltaX;
+      dragCache.currentY += deltaY;
 
-    let logicalDeltaX = deltaX;
-    let logicalDeltaY = deltaY;
-
-    // 仅在 Windows 上修复 DPI 缩放问题
-    // macOS 的 screenX/Y 已经是逻辑像素，不需要转换
-    if (process.platform === "win32") {
-      const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
-      const scaleFactor = display.scaleFactor || 1;
-
-      // Windows 的 screenX/Y 返回物理像素，需要转换为逻辑像素
-      logicalDeltaX = Math.round(deltaX / scaleFactor);
-      logicalDeltaY = Math.round(deltaY / scaleFactor);
+      // 使用 setPosition 而非 setBounds (透明窗口性能优化)
+      manager.window.setPosition(
+        Math.round(dragCache.currentX),
+        Math.round(dragCache.currentY),
+        false // 不触发动画
+      );
+    } else {
+      // macOS 或无缓存时的回退逻辑
+      const bounds = manager.window.getBounds();
+      manager.window.setBounds({
+        x: bounds.x + deltaX,
+        y: bounds.y + deltaY,
+        width: bounds.width,
+        height: bounds.height,
+      });
     }
+  });
 
-    manager.window.setBounds({
-      x: bounds.x + logicalDeltaX,
-      y: bounds.y + logicalDeltaY,
-      width: bounds.width,
-      height: bounds.height,
-    });
+  // 窗口拖动结束 - 清理缓存
+  ipcMain.on("desktop-lyrics-window-drag-end", () => {
+    dragCache = null;
   });
 
   ipcMain.on("desktop-lyrics-window-resize", (_, { height, direction }) => {
